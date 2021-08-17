@@ -71,18 +71,23 @@ parkHoursDataService.updateDays = async function () {
                             parkHours[parkProp].open = splitHours[0];
                             parkHours[parkProp].close = splitHours[1];
                             // Extra magic hours
-                            var extraMagicHoursString = dailyParkBlock.querySelector("div.magicHours").querySelector("p:nth-child(2)").textContent;
-                            splitHours = extraMagicHoursString.split(' to ');
 
-                            if (splitHours[1] != null) {
-                                parkHours[parkProp].extraMagicHours = {};
-                                parkHours[parkProp].extraMagicHours.start = splitHours[0];
-                                parkHours[parkProp].extraMagicHours.end = splitHours[1];
+                            var magicHoursParkBlack = dailyParkBlock.querySelector("div.magicHours");
 
-                                if (parkHours[parkProp].extraMagicHours.end === parkHours[parkProp].open) {
-                                    parkHours[parkProp].extraMagicHours.type = 'AM';
-                                } else {
-                                    parkHours[parkProp].extraMagicHours.type = 'PM';
+                            if (extraMagicHoursString != null) {
+                                var extraMagicHoursString = magicHoursParkBlack.querySelector("p:nth-child(2)").textContent;
+                                splitHours = extraMagicHoursString.split(' to ');
+
+                                if (splitHours[1] != null) {
+                                    parkHours[parkProp].extraMagicHours = {};
+                                    parkHours[parkProp].extraMagicHours.start = splitHours[0];
+                                    parkHours[parkProp].extraMagicHours.end = splitHours[1];
+
+                                    if (parkHours[parkProp].extraMagicHours.end === parkHours[parkProp].open) {
+                                        parkHours[parkProp].extraMagicHours.type = 'AM';
+                                    } else {
+                                        parkHours[parkProp].extraMagicHours.type = 'PM';
+                                    }
                                 }
                             }
                             parkHours[parkProp].parades = [];
