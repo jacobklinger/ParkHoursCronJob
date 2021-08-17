@@ -5,3 +5,5 @@ async function handle() {
 }
 
 exports.handler = handle;
+
+handle();

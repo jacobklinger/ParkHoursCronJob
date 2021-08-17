@@ -1,6 +1,6 @@
 const request = require('request');
 const jsdom = require("jsdom");
-const dynamoService = require("./dynamoService");
+const apiService = require('./apiService');
 const { JSDOM } = jsdom;
 
 const parkHoursDataService = {};
@@ -159,7 +159,8 @@ parkHoursDataService.updateDays = async function () {
                 }
             }
             console.log(offsetDate.toISOString().substring(0, 10) + ", " + JSON.stringify(parkHours));
-            dynamoService.insert(offsetDate.toISOString().substring(0, 10), JSON.stringify(parkHours));
+            apiService.head(date, parkHours);
+            noHours = true;
         }
         date.setDate(date.getDate() + 5);
     }
