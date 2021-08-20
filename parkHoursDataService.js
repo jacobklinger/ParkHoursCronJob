@@ -1,20 +1,31 @@
 const request = require('request');
 const jsdom = require("jsdom");
-const dynamoService = require("./dynamoService");
+const apiService = require('./apiService');
 const { JSDOM } = jsdom;
 
 const parkHoursDataService = {};
 
-const parks = {
-    "magicKingdom": "magic-kingdom",
-    "epcot": "epcot",
-    "hollywoodStudios": "hollywood-studios",
-    "animalKingdom": "animal-kingdom"
+const wdwOptions = {
+    "url": "https://disneyworld.disney.go.com/calendars/five-day/",
+    "parks": {
+        "magicKingdom": "magic-kingdom",
+        "epcot": "epcot",
+        "hollywoodStudios": "hollywood-studios",
+        "animalKingdom": "animal-kingdom"
+    }
 };
 
-async function makeRequest(date) {
+const dlrOptions = {
+    "url": "https://disneyland.disney.go.com/calendars/five-day/",
+    "parks": {
+        "disneyland": "disneyland",
+        "disneyCaliforniaAdventure": "disney-california-adventure"
+    }
+};
+
+async function makeRequest(requestUrl, date) {
     const options = {
-        url: 'https://disneyworld.disney.go.com/calendars/five-day/' + date,
+        url: requestUrl + date,
         headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.186 Safari/537.36',
             'Accept': '*/*',
@@ -30,13 +41,18 @@ async function makeRequest(date) {
 }
 
 parkHoursDataService.updateDays = async function () {
+    await updateDaysHelper(wdwOptions);
+    await updateDaysHelper(dlrOptions);
+}
+
+async function updateDaysHelper(options) {
     // Start with today
     var date = new Date();
     date = new Date(date.toLocaleString('sv', { timeZone: 'America/New_York' }).substring(0, 10));
 
     var noHours = false;
     while (!noHours) {
-        var html = await makeRequest(date.toISOString().substring(0, 10));
+        var html = await makeRequest(options.url, date.toISOString().substring(0, 10));
         const dom = new JSDOM(html);
         for (let i = 0; i < 5; i++) {
             noHours = true;
@@ -48,9 +64,10 @@ parkHoursDataService.updateDays = async function () {
             var day = splitDates[2];
 
             var parkHours = {};
+            parkHours.parks = {};
 
-            for (parkProp in parks) {
-                var parkValue = parks[parkProp];
+            for (parkProp in options.parks) {
+                var parkValue = options.parks[parkProp];
                 var selector = "td[headers*='" + getDate(month, day) + " " + parkValue + "']";
 
                 var dailyParkBlock = dom.window.document.querySelector(selector);
@@ -65,32 +82,27 @@ parkHoursDataService.updateDays = async function () {
                     var parkHoursClass = parkHoursBlockHours.className;
                     var splitHours = parkHoursString.split(' to ');
 
-                    parkHours[parkProp] = {};
+                    thisPark = {};
                     if (parkHoursClass !== "parkHoursClosure") {
                         if (splitHours[1] != null) {
-                            parkHours[parkProp].open = splitHours[0];
-                            parkHours[parkProp].close = splitHours[1];
-                            // Extra magic hours
+                            thisPark.hours = {};
+                            thisPark.hours.start = splitHours[0];
+                            thisPark.hours.end = splitHours[1];
+                            // Park hopper magic hours
 
-                            var magicHoursParkBlack = dailyParkBlock.querySelector("div.magicHours");
+                            var parkHoursParkBlock = dailyParkBlock.querySelector("div.parkHopperHours");
 
-                            if (extraMagicHoursString != null) {
-                                var extraMagicHoursString = magicHoursParkBlack.querySelector("p:nth-child(2)").textContent;
-                                splitHours = extraMagicHoursString.split(' to ');
+                            //if (parkHopperHoursString != null) {
+                            var parkHopperHoursString = parkHoursParkBlock.querySelector("p:nth-child(2)").textContent;
+                            splitHours = parkHopperHoursString.split(' to ');
 
-                                if (splitHours[1] != null) {
-                                    parkHours[parkProp].extraMagicHours = {};
-                                    parkHours[parkProp].extraMagicHours.start = splitHours[0];
-                                    parkHours[parkProp].extraMagicHours.end = splitHours[1];
-
-                                    if (parkHours[parkProp].extraMagicHours.end === parkHours[parkProp].open) {
-                                        parkHours[parkProp].extraMagicHours.type = 'AM';
-                                    } else {
-                                        parkHours[parkProp].extraMagicHours.type = 'PM';
-                                    }
-                                }
+                            if (splitHours[1] != null) {
+                                thisPark.parkHopperHours = {};
+                                thisPark.parkHopperHours.start = splitHours[0];
+                                thisPark.parkHopperHours.end = splitHours[1];
                             }
-                            parkHours[parkProp].parades = [];
+                            //}
+                            thisPark.parades = [];
                             var parades = dailyParkBlock.querySelectorAll("div.parades div.eventDetailsWrapper div.eventDetail div.textColumn");
                             for (let j = 0; j < parades.length; j++) {
                                 var paradeLink = parades[j].querySelector("a");
@@ -106,13 +118,17 @@ parkHoursDataService.updateDays = async function () {
                                     else {
                                         time.start = paradeTime;
                                     }
-                                    var parade = { "name": paradeName, "times": [time] };
-                                    parkHours[parkProp].parades.push(parade);
+                                    var parade = { "name": paradeName, "start": time.start };
+                                    thisPark.parades.push(parade);
                                 }
                             }
 
-                            parkHours[parkProp].fireworks = [];
+                            thisPark.fireworks = [];
                             var fireworks = dailyParkBlock.querySelectorAll("div.fireworksandNighttimeEntertainment div.eventDetailsWrapper div.eventDetail div.textColumn");
+                            if (fireworks.length == 0)
+                            {
+                                fireworks = dailyParkBlock.querySelectorAll("div.nighttime-spectacular-firework div.eventDetailsWrapper div.eventDetail div.textColumn");
+                            }
                             for (let j = 0; j < fireworks.length; j++) {
                                 var fireworkLink = fireworks[j].querySelector("a");
 
@@ -123,7 +139,7 @@ parkHoursDataService.updateDays = async function () {
                                 if (fireworkLink != null) {
                                     var fireworkName = fireworkLink.textContent;
 
-                                    if (fireworkName !== '-') {
+                                    if (fireworkName !== '-' && fireworkName !='—') {
                                         var fireworkTime = fireworks[j].querySelector("p.operatingHoursContainer").textContent;
                                         var time = {};
                                         if (fireworkTime.indexOf(' to ') > -1) {
@@ -134,13 +150,13 @@ parkHoursDataService.updateDays = async function () {
                                         else {
                                             time.start = fireworkTime;
                                         }
-                                        var firework = { "name": fireworkName, "times": [time] };
-                                        parkHours[parkProp].fireworks.push(firework);
+                                        var firework = { "name": fireworkName, "start": time.start };
+                                        thisPark.fireworks.push(firework);
                                     }
                                 }
                             }
                         }
-                        parkHours[parkProp].events = [];
+                        thisPark.events = [];
                         var events = dailyParkBlock.querySelectorAll("div.events div.eventDetailsWrapper div.eventDetail div.textColumn");
                         for (let j = 0; j < events.length; j++) {
                             var eventLink = events[j].querySelector("a");
@@ -155,16 +171,19 @@ parkHoursDataService.updateDays = async function () {
                                 }
                                 else {
                                     time.start = eventTime;
+                                    time.end = null;
                                 }
-                                var event = { "name": eventName, "times": [time] };
-                                parkHours[parkProp].events.push(event);
+                                var event = { "name": eventName, "start": time.start, "end": time.end };
+                                thisPark.events.push(event);
                             }
                         }
                     }
+                    parkHours.parks[parkProp] = thisPark;
                 }
             }
             console.log(offsetDate.toISOString().substring(0, 10) + ", " + JSON.stringify(parkHours));
-            dynamoService.insert(offsetDate.toISOString().substring(0, 10), JSON.stringify(parkHours));
+            await apiService.add(offsetDate.toISOString().substring(0, 10), parkHours);
+            noHours = true;
         }
         date.setDate(date.getDate() + 5);
     }
