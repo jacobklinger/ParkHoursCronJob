@@ -2,24 +2,34 @@ const axios = require('axios');
 
 const apiService = {};
 
-const endpoint = "ec2-54-162-5-35.compute-1.amazonaws.com:8080/parkHours";
+const endpoint = "http://localhost:8080/parkHours";
 
-apiService.head  = async function (date, parkHours) {
-    axios.head(endpoint + '/' + date)
+apiService.add  = async function (date, parkHours) {
+    let apiServiceResponse;
+
+    await axios.head(endpoint + '/' + date)
         .then(function (response) {
-            return response;
+            apiServiceResponse = response;
         })
         .catch(function (error) {
             console.log(error);
+            apiServiceResponse = error.response;
         });
+
+        if (apiServiceResponse.status == 200)
+        {
+            await axios.patch(endpoint + '/' + date, parkHours)
+                .catch(function (error) {
+                    console.log(error);
+            });
+        }
+        else if (apiServiceResponse.status == 404) 
+        {
+            await axios.put(endpoint + '/' + date, parkHours)
+                .catch(function (error) {
+                    console.log(error);
+            });
+        }
 }
-
-apiService.put  = async function (date, parkHours) {
-}
-
-apiService.patch  = async function (date, parkHours) {
-}
-
-
 
 module.exports = apiService;
